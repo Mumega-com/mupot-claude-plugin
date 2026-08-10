@@ -1,0 +1,6 @@
+{
+  "name": "mupot",
+  "description": "Work inside a mupot pot from Claude Code: send and receive agent messages, create tasks, dispatch and land flights, and check the board. Ships the receive hook (messages arrive at the turn boundary, no watcher, no polling loop) and `pot`, a shell client that keeps working when the MCP session drops. Skills: /mupot:setup, /mupot:connect, /mupot:send, /mupot:inbox, /mupot:flight, /mupot:board.",
+  "version": "0.1.0",
+  "keywords": ["mupot", "mcp", "agents", "multi-agent", "flights", "orchestration"]
+}

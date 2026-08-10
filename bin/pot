@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# pot — call any mupot MCP tool as an AGENT-BOUND identity, from the shell.
+#
+# WHY THIS EXISTS
+#
+# 1. One mupot token can provision OR message, never both:
+#      operator token (bound_agent_id = null) → mint/provision/grant; `send` and
+#        `inbox` return not_agent_bound
+#      agent-bound token                      → send/inbox/task/flight/presence;
+#        cannot mint
+#    A Claude Code session configures MCP servers per entry, so a seat that holds only
+#    one of the two silently loses half the surface — with a confusing error, because
+#    the tool exists and the token is valid, it is just the wrong KIND of token.
+#    Install both entries (see /mupot:connect) and use this for the agent-bound half.
+#
+# 2. MCP sessions expire. When they do, every mupot tool disappears mid-task. This
+#    keeps working, because it holds no session — one HTTPS request per call.
+#
+# Usage:
+#   pot send        '{"to":"<agent-uuid>","body":"text"}'
+#   pot inbox       '{"limit":5,"peek":true}'
+#   pot peers       '{"squad_id":"<squad>"}'
+#   pot task_create '{"squad_id":"<squad>","title":"...","done_when":"..."}'
+#   pot <tool>      '<json args>'
+#   MUPOT_AGENT=river pot inbox '{"limit":3,"peek":true}'   # act as another seat you own
+#
+# Config:
+#   MUPOT_AGENT      agent slug. Resolution order, first hit wins:
+#                      $MUPOT_AGENT → ~/.mupot/agent (one line) → $USER
+#                    The file exists so a fresh shell, a cron, and a Claude Code hook all
+#                    agree on WHO YOU ARE without anyone editing a shell profile. $USER is
+#                    last and is almost always wrong for a customer — it is kept only so an
+#                    existing single-seat host keeps working.
+#   MUPOT_TOKEN_DIR  where agent-bound tokens live (default: ~/.mupot/agents)
+#   MUPOT_ENDPOINT   MCP endpoint (default: https://mupot.mumega.com/mcp)
+#
+# Never echoes the token. Prints the tool's inner JSON result when it can, else the
+# raw envelope — so errors stay visible instead of being swallowed into an empty result.
+
+set -uo pipefail
+
+AGENT="${MUPOT_AGENT:-}"
+if [ -z "${AGENT}" ] && [ -r "${HOME}/.mupot/agent" ]; then
+  AGENT="$(head -n 1 "${HOME}/.mupot/agent" | tr -d '[:space:]')"
+fi
+AGENT="${AGENT:-${USER:-}}"
+TOOL="${1:-}"
+ARGS="${2:-{\}}"
+ENDPOINT="${MUPOT_ENDPOINT:-https://mupot.mumega.com/mcp}"
+TOKEN_DIR="${MUPOT_TOKEN_DIR:-${HOME}/.mupot/agents}"
+
+if [ -z "${TOOL}" ]; then
+  echo "usage: pot <tool> '<json-args>'   (MUPOT_AGENT=<slug> to act as another seat)" >&2
+  exit 2
+fi
+if [ -z "${AGENT}" ]; then
+  echo "pot: no agent. Set MUPOT_AGENT, or write your slug to ~/.mupot/agent:" >&2
+  echo "     printf '%s\\n' '<your-slug>' > ~/.mupot/agent" >&2
+  exit 2
+fi
+
+# Strictly '<agent>-agent-bound.token'. Deliberately no fallback to '<agent>.token':
+# every tool here derives identity from the token alone, so a near-miss filename holding
+# a credential bound to a DIFFERENT agent makes you act as that agent, silently. Prefer
+# a hard failure over a plausible file.
+TOKEN_FILE="${TOKEN_DIR}/${AGENT}-agent-bound.token"
+if [ ! -r "${TOKEN_FILE}" ]; then
+  echo "pot: no agent-bound token for '${AGENT}' at ${TOKEN_FILE}" >&2
+  echo "     run /mupot:setup, or set MUPOT_AGENT / MUPOT_TOKEN_DIR" >&2
+  exit 3
+fi
+
+RESP=$(curl -sS -m 30 "${ENDPOINT}" \
+  -H "Authorization: Bearer $(cat "${TOKEN_FILE}")" \
+  -H 'content-type: application/json' \
+  -H "user-agent: pot-cli/0.1 (+${AGENT})" \
+  -d "$(printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "${TOOL}" "${ARGS}")" \
+  2>&1) || { echo "pot: transport failure" >&2; exit 4; }
+
+printf '%s' "${RESP}" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except Exception:
+    print(raw); raise SystemExit(0)
+# A JSON-RPC error is the interesting case — surface it loudly, never swallow it.
+if "error" in d:
+    print(json.dumps(d["error"], indent=2)); raise SystemExit(1)
+try:
+    print(json.dumps(json.loads(d["result"]["content"][0]["text"]), indent=2))
+except Exception:
+    print(json.dumps(d, indent=2))
+'

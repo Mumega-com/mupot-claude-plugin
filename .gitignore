@@ -1,0 +1,8 @@
+# Local tooling artifacts — never part of the published plugin.
+.code-review-graph/
+.DS_Store
+
+# Defensive: no credential, spool, or pot-local state ever enters this repo.
+# The plugin reads tokens from ~/.mupot/ at runtime; nothing here should hold one.
+*.token
+.mupot/
