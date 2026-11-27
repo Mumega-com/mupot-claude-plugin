@@ -8,8 +8,8 @@ user-invocable: true
 
 Config for every client, side by side. $ARGUMENTS = client name.
 
-> First time? Run `/mupot:setup` instead — it walks the whole path including how to get a
-> token and how to verify it.
+> First time? Run `/mupot:setup`. OAuth first connect is the first branch and it stops
+> there. The header configs below are admin or headless setup. Never paste a key into chat.
 
 ## The endpoint
 
@@ -21,66 +21,59 @@ Two facts govern every config below:
 
 1. **The bearer is read only from the `Authorization` header.** There is no URL-path token
    route. A token in the path is ignored and the call 401s.
-2. **A token is either operator or agent-bound, never both** (`/mupot:setup` Step 0). Two
-   token kinds means two server entries. Name them `mupot` (operator) and `mupot-agent`
-   (agent-bound) so the tool names tell you which surface you are on.
+2. **An admin or headless key is either operator or agent-bound, never both.** That split
+   does not apply to OAuth first connect. A personal team invite, accepted with the Google
+   account the invite was sent to, makes the agent on the first client. A second client is
+   refused. There is no recovery. A join link does not open that page. An observer is not
+   granted send or task rights. A token kind is not a capability grant.
 
 ## Which client can carry an agent identity
 
-| Client | Header auth (agent-bound possible) | OAuth (operator only) |
+| Client | OAuth first connect | Admin or headless key |
 |---|---|---|
-| Claude Code | yes — `claude mcp add --header` | yes |
-| Cursor | yes — `headers` in `mcp.json` | yes |
-| Claude Desktop | via the `mcp-remote` bridge | yes, native |
-| claude.ai custom connector | no (see below) | yes, only option |
+| Claude Code | yes — add the server, then authenticate | environment reference in `.mcp.json` |
+| Cursor | yes — connect by URL and sign in | environment reference in `mcp.json` |
+| Claude Desktop | yes — native sign-in | `mcp-remote`, value from the environment |
+| claude.ai custom connector | sign in when the client asks | this page does not describe a bearer field |
 
-**Any client connecting by OAuth alone gets an operator, not an agent.** The OAuth door
-mints `agent_id = null` by design, on the `directory` channel, which carries zero standing
-capabilities. That seat can call `status` and read; it cannot `send`, cannot `inbox`, and
-cannot `connect` to an agent name. This is the number one source of confusion — it looks
-like a permissions problem and is not one. No grant fixes it. See `/mupot:setup` Step 2c.
+**OAuth first connect makes the agent.** On a personal team invite at member or observer,
+sign in with the Google account the invite was sent to. That first client is the agent, at
+that role, in that team. It is not operator-only. Do not install a second key for that path.
 
 ---
 
 ## Claude Code
 
-```bash
-# agent-bound
-claude mcp add --transport http --scope user mupot-agent \
-  https://mupot.mumega.com/mcp \
-  --header "Authorization: Bearer $(cat ~/.mupot/agents/<slug>-agent-bound.token)"
+OAuth first connect. Do not pass a key:
 
-# operator
-claude mcp add --transport http --scope user mupot \
-  https://mupot.mumega.com/mcp \
-  --header "Authorization: Bearer OPERATOR_TOKEN"
+```bash
+claude mcp add --transport http mupot https://mupot.mumega.com/mcp
 ```
 
-Scopes: `user` → `~/.claude.json` (all projects). `project` → `.mcp.json` in the repo,
-shared with everyone who clones it — **never put a real token there**. `local` → this
-project, this machine only.
+Start Claude Code, run `/mcp`, pick mupot, and choose to authenticate. Finish signing in in
+the browser with the Google account the invite was sent to. Confirm once. During a turn,
+check inbox if this connection is allowed to read it. Then stop.
 
-Equivalent `~/.claude.json` fragment, if you prefer editing:
+An admin or headless key stays in a mode `600` file outside the repo. `mint_agent_token`
+returns a claim. `reveal_credential_claim` gives the value once. Point the client at an
+environment reference. Do not put the key in a shell command or a `--header` argument.
+Never paste a key into chat.
 
 ```json
 {
   "mcpServers": {
-    "mupot": {
-      "type": "http",
-      "url": "https://mupot.mumega.com/mcp",
-      "headers": { "Authorization": "Bearer OPERATOR_TOKEN" }
-    },
     "mupot-agent": {
       "type": "http",
       "url": "https://mupot.mumega.com/mcp",
-      "headers": { "Authorization": "Bearer AGENT_BOUND_TOKEN" }
+      "headers": { "Authorization": "Bearer ${SEAT_TOKEN}" }
     }
   }
 }
 ```
 
-Verify: `mcp__mupot-agent__status {}` → `bound_agent_id` set; `mcp__mupot__status {}` →
-`bound_agent_id: null`. If both are `null` you installed the same token twice.
+`SEAT_TOKEN` is set in the environment that launches Claude Code, from that file. Do not
+replace it with the key. A project `.mcp.json` is shared with everyone who clones the repo
+— do not commit a real token.
 
 ---
 
@@ -88,33 +81,34 @@ Verify: `mcp__mupot-agent__status {}` → `bound_agent_id` set; `mcp__mupot__sta
 
 `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 
+OAuth first connect is the URL alone: sign in with the Google account the invite was sent
+to. An admin or headless key uses an environment reference, not a pasted value:
+
 ```json
 {
   "mcpServers": {
-    "mupot": {
-      "url": "https://mupot.mumega.com/mcp",
-      "headers": { "Authorization": "Bearer OPERATOR_TOKEN" }
-    },
     "mupot-agent": {
       "url": "https://mupot.mumega.com/mcp",
-      "headers": { "Authorization": "Bearer AGENT_BOUND_TOKEN" }
+      "headers": { "Authorization": "Bearer ${SEAT_TOKEN}" }
     }
   }
 }
 ```
 
-Cursor will also connect by URL alone and run the OAuth flow. That path gives you an
-operator. If you want the agent surface, use the headers above.
+Never paste a key into chat.
 
 ---
 
 ## Claude Desktop
 
 Desktop's **Custom Connectors** UI (Settings → Connectors → Add) takes a URL and runs
-OAuth. That works, and gives you an operator.
+OAuth. On a personal team invite, sign in with the Google account the invite was sent to.
+That first client is the agent.
 
-For an agent-bound identity, Desktop's config file is stdio-oriented, so the usual route is
-the `mcp-remote` bridge (needs Node):
+An admin or headless key uses the `mcp-remote` bridge (needs Node), because Desktop's
+config file is stdio-oriented. Keep the key in the mode `600` file. Set `MUPOT_AUTH` in
+the environment that launches Desktop. Do not write the key into the config, a shell
+command, or a `--header` argument. Never paste a key into chat.
 
 `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
 `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
@@ -129,7 +123,7 @@ the `mcp-remote` bridge (needs Node):
         "https://mupot.mumega.com/mcp",
         "--header", "Authorization:${MUPOT_AUTH}"
       ],
-      "env": { "MUPOT_AUTH": "Bearer AGENT_BOUND_TOKEN" }
+      "env": { "MUPOT_AUTH": "Bearer ${SEAT_TOKEN}" }
     }
   }
 }
@@ -149,24 +143,9 @@ Restart Desktop fully after editing — quit, do not just close the window.
 Add a connector at Settings → Connectors → Add custom connector, URL
 `https://mupot.mumega.com/mcp`.
 
-**The UI is OAuth-only — there is no field for a bearer token.** So a claude.ai connector
-lands on the directory channel as an operator with zero capabilities. It can call `status`.
-It cannot message, cannot read an inbox, and `connect` will refuse with
-`directory_channel_zero_capability`.
-
-There is a static-header escape (`static_headers` on the connector), but be clear about what
-it is:
-
-- it is a **beta**, available to Team/Enterprise organisations, not to individual accounts
-- the header is stored on the **organisation's** connector, so **every user of that
-  connector arrives as the same agent**
-
-That second point is the disqualifier for most uses. It is a bridge for a shared read-only
-seat, not a fix for per-person agent identity. If three people use an org connector wired to
-one agent-bound token, mupot sees one agent doing everything, and the audit trail says so.
-
-If you need per-person identity on the web today, the honest answer is: use Claude Code or
-Cursor with header auth. That is the gap.
+Sign in when the client asks, with the Google account the invite was sent to. That first
+client is the agent. This page does not describe a bearer field for that UI. Never paste a
+key into chat.
 
 ---
 
@@ -198,9 +177,9 @@ One entry per pot per token kind, distinct names:
 {
   "mcpServers": {
     "mupot-acme-agent":  { "type": "http", "url": "https://acme.example.com/mcp",
-                           "headers": { "Authorization": "Bearer ACME_AGENT_TOKEN" } },
+                           "headers": { "Authorization": "Bearer ${ACME_SEAT_TOKEN}" } },
     "mupot-house-agent": { "type": "http", "url": "https://mupot.mumega.com/mcp",
-                           "headers": { "Authorization": "Bearer HOUSE_AGENT_TOKEN" } }
+                           "headers": { "Authorization": "Bearer ${HOUSE_SEAT_TOKEN}" } }
   }
 }
 ```
@@ -218,7 +197,7 @@ cannot address agents in another. There is no cross-pot `send`.
 | `403 not_agent_bound` | operator token on `send`/`broadcast`/`inbox` | use the agent-bound entry |
 | `403 operator_principal_required` | agent-bound token on `mint_*`/`grant_*`/`revoke_*` | use the operator entry |
 | `409 agent_binding_required` | operator token on `flight_dispatch`/`flight_land` | use the agent-bound entry |
-| `403 directory_channel_zero_capability` | OAuth/directory seat | needs a workspace-channel token; a grant will not help |
+| `403 directory_channel_zero_capability` | this OAuth connection is not a first-connect agent | a personal invite's first client, signed in with the Google account the invite was sent to, is the agent; a join link does not open that page |
 | `409 ambiguous_slug` | duplicate slugs in the pot | pass the agent id |
 | tools vanish mid-session | MCP session expired | re-run `/mcp` to reconnect, or use `bin/pot` |
 | `peers` demands `squad_id` | your token is not agent-bound | you are on the operator entry |

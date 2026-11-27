@@ -171,12 +171,10 @@ above zero, three things change:
 3. **The ceiling is `min(all caps) × 10,000` micro-USD** (1 cent = 10,000 micro-USD).
    Exceeding it: `409 flight_budget_exceeds_cap`, with `cap_micro_usd` in the detail.
 
-> **`budget_cap_cents` is settable only at creation.** `create_agent` and `create_squad`
-> accept it. `update_agent` does **not** — the field is not in its schema, and the schema is
-> `additionalProperties: false`, so passing it is a hard error rather than a silent no-op.
-> There is **no `update_squad` tool at all**. A squad or agent created without a cap can
-> never dispatch a budgeted flight, and the only remedy is to create a new one. Set caps at
-> creation time, every time.
+> **`budget_cap_cents` is not frozen at creation.** `update_agent` and `update_squad` both
+> accept it. An unset cap is unlimited. A budgeted flight (`budget_micro_usd` above zero)
+> still needs a positive cap on the bound agent and each referenced squad, or the server
+> returns `409 flight_budget_policy_missing`.
 
 ---
 
