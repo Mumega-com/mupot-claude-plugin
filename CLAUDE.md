@@ -34,9 +34,12 @@ shaped the way it is, name the failure it prevents, and never write marketing.
 
 - **No marketing.** No "seamless", no "powerful", no "just works". If it does not work, say
   so in the same paragraph where you say what it does.
-- **Every skill carries a "what does not work" note** where one applies. Receive is a pull,
-  not a push. OAuth yields an operator. `budget_cap_cents` is immutable after creation.
-  These are load-bearing and must not be softened in an edit.
+- **Every skill carries a "what does not work" note** where one applies. OAuth first
+  connect on a personal team invite makes the agent. `mint_agent_token` returns a claim;
+  `reveal_credential_claim` gives the value once. `update_agent` and `update_squad` accept
+  `budget_cap_cents`. This plugin does not implement idle wake or push. During a turn,
+  check inbox if the connection is allowed to read it. These are load-bearing and must not
+  be softened in an edit.
 - **Verify the mechanism before documenting it.** Read the mupot source or call the tool.
   Docstrings are claims about the past; behaviour changes and comments do not.
 - **Exact error strings.** `not_agent_bound`, `operator_principal_required`,
@@ -45,7 +48,9 @@ shaped the way it is, name the failure it prevents, and never write marketing.
   search for these. Spell them exactly as the server emits them.
 - **Placeholders only.** No real token, agent id, squad id, project id, or tenant slug in any
   file, ever — including in an example that "obviously" is not real. Use `<slug>`,
-  `PASTE_TOKEN_HERE`, `<squad-id>`.
+  `${SEAT_TOKEN}`, `<squad-id>`. Never paste a key into chat, a shell command, or a
+  `--header` argument. Keep a headless key in a mode `600` file and reference it from the
+  environment.
 - **`~/.mupot/` only.** Never reference `~/.fleet`, `~/SOS`, tmux session names, or any other
   host-specific layout. Those belong to one operator's machine and must not leak into a
   customer plugin.
@@ -73,8 +78,10 @@ Cross-link siblings as `/mupot:setup`, `/mupot:flight`, and so on.
   message.
 - The hook's order is `peek → spool → consume → emit`, and it is load-bearing. Do not
   reorder. Spooling after consuming marks rows read that nobody ever saw.
-- The hook filters messages whose `from_agent` is the running agent. Do not remove that:
-  two seats auto-replying to each other is a paid infinite loop.
+- The hook compares `from_agent` with the configured slug. An agent id and a slug are not
+  the same value, so that comparison does not filter the agent's own mail. Do not document
+  it as if it does, and do not change the hook in a text edit. A self-send can still start
+  a reply loop.
 - Neither `pot` nor the hook may echo a token, to stdout, stderr, or a log.
 - Token filenames are strictly `<slug>-agent-bound.token`. Do not add a fallback to
   `<slug>.token` — a near-miss filename holding a credential for a different agent makes the

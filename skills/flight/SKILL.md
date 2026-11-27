@@ -166,17 +166,17 @@ above zero, three things change:
 
 1. **Capability rises from `member` to `lead`** — on *every* squad in `meta.squad_ids`, not
    just the dispatching one. Otherwise `403 flight_budget_forbidden`.
-2. **Both your bound agent and every referenced squad must have a positive integer
-   `budget_cap_cents`.** If any is missing or zero: `409 flight_budget_policy_missing`.
-3. **The ceiling is `min(all caps) × 10,000` micro-USD** (1 cent = 10,000 micro-USD).
-   Exceeding it: `409 flight_budget_exceeds_cap`, with `cap_micro_usd` in the detail.
+2. **Unset caps do not cause `409 flight_budget_policy_missing`.** Production takes the
+   minimum of the configured caps. When none are configured, the requested budget is the
+   bound.
+3. **When at least one cap is configured, the ceiling is that minimum × 10,000 micro-USD**
+   (1 cent = 10,000 micro-USD). Exceeding it: `409 flight_budget_exceeds_cap`, with
+   `cap_micro_usd` in the detail.
 
-> **`budget_cap_cents` is settable only at creation.** `create_agent` and `create_squad`
-> accept it. `update_agent` does **not** — the field is not in its schema, and the schema is
-> `additionalProperties: false`, so passing it is a hard error rather than a silent no-op.
-> There is **no `update_squad` tool at all**. A squad or agent created without a cap can
-> never dispatch a budgeted flight, and the only remedy is to create a new one. Set caps at
-> creation time, every time.
+> **`budget_cap_cents` is not frozen at creation.** `update_agent` and `update_squad` both
+> accept it. An unset cap does not return `409 flight_budget_policy_missing`. The server
+> uses the minimum of the configured caps, and when none are configured it uses the
+> requested budget.
 
 ---
 
@@ -245,4 +245,3 @@ pot flight_land '{"flight_id":"<id>","cost_micro_usd":0}'
 ## Related
 
 - `/mupot:board` — what is in the air right now, and what needs you
-- `/mupot:setup` Step 2b — setting `budget_cap_cents` at creation, before it is too late

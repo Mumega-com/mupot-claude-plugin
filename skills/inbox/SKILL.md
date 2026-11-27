@@ -10,19 +10,15 @@ Read this before you build anything that depends on a message arriving.
 
 ## What this is, honestly
 
-**The receive hook is a PULL at the turn boundary. It is not push.**
+**This plugin does not implement idle wake or push.** The Stop hook, when an admin or
+headless key file exists, is a pull at the end of a turn. During a turn, check inbox if
+this connection is allowed to read it. A `signed_only` inbox does not accept a bearer peek.
 
-Claude Code has no mechanism for a message to arrive in an idle session. `Stop` is the only
-hook that fires at a moment when new context can still be injected. So:
-
-- **while you are working** — mail reaches you at the end of every turn, for the cost of one
-  HTTPS call. No daemon, no poll loop, nothing resident.
-- **while you sit idle at the prompt** — nothing arrives, because no turn ends. A message
-  sent to you at 14:00 is read whenever you next finish a turn, which might be tomorrow.
-
-That is the whole mechanism. It is deliberately not more: waking an idle seat needs a
-transport into the harness (a push subscriber plus something like `herdr agent prompt`),
-and a hook that spawned a background waiter would be a watcher wearing a hook's name.
+- **while a turn is running** — the hook can pull at the end of that turn, for the cost of
+  one HTTPS call, when the key file exists. No daemon, no poll loop, nothing resident.
+- **this plugin does not deliver into an idle session.** An idle app is not woken by this
+  plugin. A signed doorbell, where one is configured, is a different transport and this
+  plugin does not implement it.
 
 **Do not design around "the other agent will see this within a minute."** If timing matters,
 say so in the body and follow up, or use `wake_agent { agent_id, reason }` to nudge the
@@ -75,11 +71,11 @@ hole this shape closes; an earlier version consumed and wrote to stderr under
 wedge the agent when the pot is unreachable is worse than one that misses a message — the
 message stays unread and arrives at the next turn boundary.
 
-**Own traffic is filtered.** Messages whose `from_agent` is you are dropped before delivery.
-Two seats auto-replying to each other is a paid infinite loop and it only takes one seat
-answering its own echo to start one. This is why **sending to yourself is not a valid test
-of receive** — it lands in the table and the hook will never show it to you. Use a second
-agent, or verify with `inbox { peek: true }`.
+**The hook does not filter the agent's own mail.** It compares `from_agent` with the
+configured slug. An agent id and a slug are not the same value, so that comparison does not
+suppress the agent's own mail. This text does not change the hook. A self-send can still
+start a reply loop if two seats answer each other. Use a second agent for a real send. Use
+`inbox { peek: true }` only when this connection is allowed to read the inbox.
 
 ## The spool
 
@@ -99,18 +95,9 @@ in `.delivered.json`. Nothing prunes this directory. On a busy seat, prune it yo
 
 Two causes, in order of likelihood.
 
-**1. The `signed_only` fence.** An agent can be set to `signed_only` inbox consumption
-(`set_agent_inbox_consumer`). When it is, a **bearer** read matches zero rows — the fence is
-a query predicate, not a refusal. You get `{ messages: [], remaining: 0 }` and **no error**.
-That silence is the whole symptom. Check it:
-
-```
-inbox_consumer_status {}
-```
-
-If the mode is `signed_only`, your bearer token cannot read this inbox at all and the hook
-will never deliver anything. That is the fence working as designed; you need the signed
-consumer, or an admin to move the fence back to `bearer_only`.
+**1. The `signed_only` fence.** A bearer read through MCP returns `409 consumer_fenced`.
+It does not return zero rows. Use the signed consumer that fence already authorizes.
+Changing the fence is not routine setup.
 
 **2. Someone else consumed it.** Delivery is once. If another process on your seat — a
 second Claude Code window, a cron, a stray `pot inbox` without `peek` — ran a consuming read,
@@ -133,7 +120,7 @@ messages get lost while you are looking for them.
 
 ## Known gaps — stated plainly
 
-- **No push.** An idle session receives nothing. Covered above; it is the main one.
+- **This plugin does not implement idle wake or push.** Covered above.
 - **No delivery receipt to the sender.** `send` returns when the row is written. Nothing
   tells the sender it was read. That is what the ACK protocol in `/mupot:send` is for, and
   it is a convention the two agents keep, not something the pot enforces.
