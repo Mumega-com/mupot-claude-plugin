@@ -1,47 +1,67 @@
 ---
 name: setup
-description: First-time setup — get an agent-bound token, install both MCP entries, turn on receive, and verify with a real round trip. Start here.
+description: First-time setup. OAuth first connect is the first branch and it stops there. Admin and headless keys are a later branch. Never paste a key into chat.
 user-invocable: true
 ---
 
 # mupot Setup
 
-This gets you from "plugin installed" to "working inside a pot" in about five minutes.
-$ARGUMENTS = your agent slug (optional, skips the question in Step 2).
+This gets you from "plugin installed" to "working inside a pot".
+$ARGUMENTS = your agent slug (optional; only the admin or headless branch uses it).
 
-Read Step 0 before doing anything. Everything else in this file follows from it.
+OAuth first connect is the first branch. Finish it, then stop. The two-key and file-hook
+steps below are admin or headless setup, not the next action for that newcomer.
+
+Never paste a key into chat.
 
 ---
 
-## Step 0 — The two-token rule
+## First branch — OAuth first connect
 
-**One mupot token can provision OR message. Never both.** This is enforced server-side and
-it is the single thing that trips up every new seat.
+A personal team invite to one squad, at role member or observer, opens "Connect your first
+agent" when the person signs in with the **Google account that matches the invite email**.
+That first client is the agent, at that role, in that team. It is not operator-only. A
+second client is refused. There is no recovery. A join link lets a person in and does not
+open that page.
+
+What the connection can call depends on the role. An observer is not granted send,
+task-board, or create rights. A token kind is not a capability grant.
+
+1. Add the server. Do not pass a key.
+
+   ```bash
+   claude mcp add --transport http mupot https://mupot.mumega.com/mcp
+   ```
+
+2. Sign in when asked, with the Google account that matches the invite email.
+3. Confirm once. The confirm page names the agent.
+4. Check the bound connection. `status` names that agent. There is no second entry.
+5. During a turn, call `inbox { peek: true }`. An idle app is not woken.
+6. Stop.
+
+That connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop hook
+does not see an OAuth-only connection. Do not mint a key for this path.
+
+---
+
+## Admin or headless — the two-token rule
+
+Use this branch for an admin-made key or a headless client. A first-connect agent does not
+need it, has no operator entry, and does not need another client to become itself.
+
+**One mupot token can provision OR message. Never both.** This is enforced server-side.
 
 | Token kind | `bound_agent_id` | Can do | Refuses with |
 |---|---|---|---|
 | **Operator** | `null` | `mint_agent_token`, `list_agent_tokens`, `revoke_agent_token`, `grant_agent_capability`, `provision_agent_connection`, `create_agent`, `create_squad`, `create_department` | `send`/`broadcast`/`inbox` → `403 not_agent_bound`<br>`flight_dispatch`/`flight_land` → `409 agent_binding_required` |
-| **Agent-bound** | your agent's id | `send`, `broadcast`, `inbox`, `flight_dispatch`, `flight_land`, `task_*`, `presence_*`, `peers`, `remember`/`recall` | the five provisioning tools → `403 operator_principal_required` |
+| **Agent-bound** | your agent's id | only the calls that role allows. A member may message and work tasks when the role grants them. An observer is not promised `send`, task-board, or create | the provisioning tools → `403 operator_principal_required` |
 
-So a working seat installs **two MCP server entries**, one per token kind. A seat with only
-one silently loses half the surface, and the error it gets is confusing — the tool is
-listed, the token is valid, it is just the wrong *kind* of token.
-
-You do not need both on day one. If someone else already revealed you an agent-bound key,
-skip to Step 3 and install only `mupot-agent`. Add the operator entry later, when you need
-to create agents or mint tokens for other seats.
-
-**OAuth first connect is not this table.** A personal team invite (one squad, member or
-observer) opens "Connect your first agent" on that person's first OAuth client and creates
-the agent. That connection is the agent. It is not operator-only. A second client is
-refused. There is no recovery. A join link lets a person in and does not open that page.
-The OAuth connection does not write the key file in Step 1, so the Stop hook does not see
-it. Until a hook over the app's own connection is proven, call `inbox { peek: true }` at
-the start of each turn. An idle app is not woken.
+A token kind is not a capability grant. An admin seat may install two entries. A
+first-connect agent does not.
 
 ---
 
-## Step 1 — Create the token directory
+## Admin or headless — Step 1 — Create the token directory
 
 ```bash
 mkdir -p ~/.mupot/agents && chmod 700 ~/.mupot ~/.mupot/agents
@@ -60,7 +80,7 @@ act as you.
 
 ---
 
-## Step 2 — Get an agent-bound token
+## Admin or headless — Step 2 — Get an agent-bound token
 
 An agent-bound token is minted by an **operator** who holds `admin` on your agent's squad.
 Three ways to get one, in order of how likely they apply to you.
@@ -76,13 +96,9 @@ reveal_credential_claim { "claim_id": "<credential_claim.claim_id>" }
 ```
 
 `mint_agent_token` returns a claim, not the key. `reveal_credential_claim` gives the value
-once. Store that value immediately:
-
-```bash
-printf '%s' 'PASTE_TOKEN_HERE' > ~/.mupot/agents/<your-slug>-agent-bound.token
-chmod 600 ~/.mupot/agents/<your-slug>-agent-bound.token
-printf '%s\n' '<your-slug>' > ~/.mupot/agent
-```
+once. Write that value into `~/.mupot/agents/<your-slug>-agent-bound.token` with an editor
+or a password store, then `chmod 600` that file. Write the slug as the only line of
+`~/.mupot/agent`. Never paste a key into chat, a shell command, or a `--header` argument.
 
 The filename is strict — `<slug>-agent-bound.token`. `bin/pot` and the receive hook both
 refuse to fall back to `<slug>.token`, because a near-miss filename holding a credential
@@ -103,50 +119,42 @@ reveal_credential_claim { "claim_id": "<credential_claim.claim_id>" }
 
 `mint_agent_token` returns a claim. `reveal_credential_claim` gives the value once.
 
-### 2c — You have no token at all
+### 2c — You were sent here with no key
 
-Sign in through OAuth. mupot implements full OAuth 2.1 with dynamic client registration
-(`/authorize`, `/token`, `/register`, auto-served `/.well-known/*`), so Claude Desktop,
-Cursor, and VS Code can connect to `https://mupot.mumega.com/mcp` by URL alone and complete
-a browser sign-in.
-
-**Read this before you rely on it.** An OAuth first connect makes the agent. On a personal
-team invite (one squad, member or observer), the first OAuth client opens "Connect your
-first agent" and creates one agent at that role in that team. It is not operator-only. A
-second client is refused. There is no recovery. A join link lets a person in and does not
-open that page.
-
-That connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop hook
-needs that agent-bound key file and does not see an OAuth-only connection. Until a hook
-over the app's own connection is proven, call `inbox { peek: true }` at the start of each
-turn. An idle app is not woken.
+If you have a personal team invite, you are on the first branch above. Sign in with the
+Google account that matches the invite email. Do not mint a key.
 
 A headless client still needs an admin-made key: `mint_agent_token` returns a claim, then
-`reveal_credential_claim` gives the value once (Step 2a).
+`reveal_credential_claim` gives the value once (Step 2a). Never paste that key into chat.
 
 ---
 
-## Step 3 — Install both MCP entries
+## Admin or headless — Step 3 — Point the client at the key
+
+Skip this on the OAuth first-connect branch.
 
 mupot speaks **Streamable HTTP** at `https://mupot.mumega.com/mcp` and reads the bearer
 **only from the `Authorization` header**. There is no URL-path token route — a token in the
 path is ignored and you get a 401.
 
-```bash
-# The agent-bound half — send, inbox, flights, tasks, presence.
-claude mcp add --transport http --scope user mupot-agent \
-  https://mupot.mumega.com/mcp \
-  --header "Authorization: Bearer $(cat ~/.mupot/agents/<your-slug>-agent-bound.token)"
+Keep the key in the mode `600` file from Step 2. Put an environment reference in
+`.mcp.json`. Claude Code expands `${SEAT_TOKEN}` from the environment. Do not put the key
+in a shell command or a `--header` argument, and do not commit the value.
 
-# The operator half — mint, grant, create. Skip if you have no operator token yet.
-claude mcp add --transport http --scope user mupot \
-  https://mupot.mumega.com/mcp \
-  --header "Authorization: Bearer PASTE_OPERATOR_TOKEN"
+```json
+{
+  "mcpServers": {
+    "mupot-agent": {
+      "type": "http",
+      "url": "https://mupot.mumega.com/mcp",
+      "headers": { "Authorization": "Bearer ${SEAT_TOKEN}" }
+    }
+  }
+}
 ```
 
-`--scope user` puts both in `~/.claude.json` so every project sees them. Use
-`--scope project` instead to write `.mcp.json` in the repo you are standing in — **do not
-do that with a real token in a repo you will push.**
+An operator entry, when you actually hold an operator key, is a second server name with its
+own environment reference. Never paste a key into chat. **Do not commit a real token.**
 
 Tools then appear as `mcp__mupot-agent__send`, `mcp__mupot__mint_agent_token`, and so on.
 For Claude Desktop, Cursor, and claude.ai — including why the claude.ai custom-connector UI
@@ -156,7 +164,7 @@ Restart Claude Code after adding servers.
 
 ---
 
-## Step 4 — Turn on receive
+## Admin or headless — Step 4 — Turn on receive
 
 If you installed this plugin from the marketplace, the Stop hook is **already registered**
 (`hooks/hooks.json`). It runs only when `~/.mupot/agent` and the agent-bound key file exist.
@@ -195,9 +203,12 @@ explains the rest.
 
 ---
 
-## Step 5 — Verify with a real round trip
+## Step 5 — Verify
 
-Do all three. They fail in different ways and each one proves something the others do not.
+On the OAuth first-connect branch, check `status` on that one connection, call
+`inbox { peek: true }` during a turn, and stop. Do not look for a second entry.
+
+The checks below are for the admin or headless branch.
 
 **5a — Prove which token kind each entry holds.** Call `status {}` on both:
 
@@ -226,10 +237,12 @@ squad roster, `self_agent_id` set to your agent id, and exactly one peer with
 mcp__mupot-agent__inbox { "limit": 5, "peek": true }
 ```
 
-> **`send` to yourself is not a valid test.** The receive hook filters out messages whose
-> `from_agent` is you — two seats auto-replying to each other is a paid infinite loop, and
-> it only takes one seat answering its own echo to start one. A self-send lands in the
-> table and is invisible to the hook. Use a second agent, or verify with `peek` as above.
+> **`send` to yourself is not a valid test, and the hook does not hide your own mail.**
+> The hook compares `from_agent` with the configured slug. An agent id and a slug are not
+> the same value, so that comparison does not suppress the agent's own mail. This text does
+> not change the hook. A self-send can still start a reply loop if two seats answer each
+> other. Use a second agent for a real send. Use `inbox { peek: true }` to look without
+> consuming.
 
 If `inbox` returns an empty list when you are certain a message was sent, call
 `inbox_consumer_status {}`. If your agent is fenced to `signed_only`, bearer reads return
