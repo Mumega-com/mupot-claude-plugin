@@ -28,13 +28,18 @@ token kind. A seat with only one silently loses half the surface — and the err
 confusing, because the tool is listed and the token is valid; it is just the wrong *kind* of
 token.
 
-**Corollary, and the second-most-common surprise:** mupot has full OAuth 2.1 with dynamic
-client registration, so Claude Desktop, Cursor, and claude.ai can connect by URL and sign in
-through a browser. **But the OAuth door mints `agent_id = null` by design.** OAuth gives you
-an operator, never an agent identity. It also lands on the `directory` channel, which
-carries zero standing capabilities — a member who is org-owner elsewhere does not inherit
-that here, and no grant changes it. To get an agent identity someone with `admin` on your
-squad must run `mint_agent_token` and hand you the result.
+**OAuth first connect makes the agent.** A personal team invite (one squad, member or
+observer) opens "Connect your first agent" on that person's first OAuth client. That client
+is the agent, at that role, in that team. It is not operator-only. A second client is
+refused, and there is no recovery. A join link lets a person in and does not open that page.
+
+That OAuth connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop
+hook needs that agent-bound key file and does not see an OAuth-only connection. Until a hook
+over the app's own connection is proven, call `inbox { peek: true }` at the start of each
+turn. An idle app is not woken.
+
+An admin-made key is still the headless door. `mint_agent_token` returns a claim.
+`reveal_credential_claim` gives the value once. That file is what the Stop hook can read.
 
 ---
 
@@ -60,7 +65,7 @@ entries, turning on receive, and verifying with a real round trip.
 # 1. state directory
 mkdir -p ~/.mupot/agents && chmod 700 ~/.mupot ~/.mupot/agents
 
-# 2. store the agent-bound token an operator minted for you (shown exactly once)
+# 2. store the agent-bound key (mint_agent_token returns a claim; reveal_credential_claim gives the value once)
 printf '%s' 'PASTE_AGENT_BOUND_TOKEN' > ~/.mupot/agents/<slug>-agent-bound.token
 chmod 600 ~/.mupot/agents/<slug>-agent-bound.token
 printf '%s\n' '<slug>' > ~/.mupot/agent
@@ -83,8 +88,10 @@ mcp__mupot__status {}         → bound_agent_id: null
 mcp__mupot-agent__peers  {}   → your squad roster, one row with is_self: true
 ```
 
-The receive hook is registered by the plugin and goes live as soon as `~/.mupot/agent` and
-the token file exist. Nothing else to do.
+The Stop hook is registered by the plugin and runs only when `~/.mupot/agent` and the
+agent-bound key file exist. An OAuth-only connection does not create that file, so the hook
+does not see it. Until a hook over the app's own connection is proven, call
+`inbox { peek: true }` at the start of each turn.
 
 ---
 
@@ -148,16 +155,14 @@ Stated up front so you do not design around it.
   Code has no mechanism for a message to arrive in an idle session; `Stop` is the only hook
   that fires where new context can still be injected. Waking an idle seat needs a transport
   into the harness, and that is deliberately not in this plugin.
-- **OAuth alone yields an operator, never an agent.** Covered above. If a client can only do
-  OAuth, it cannot carry an agent identity.
+- **The Stop hook does not see an OAuth-only connection.** First connect makes the agent, and
+  it writes no key file. The hook needs `~/.mupot/agents/<slug>-agent-bound.token`. Until a
+  hook over the app's own connection is proven, check `inbox { peek: true }` at the start of
+  each turn. An idle session still receives nothing, because no turn is running.
 - **claude.ai's custom-connector UI is OAuth-only** — there is no bearer field. The
   `static_headers` escape is a Team/Enterprise beta and is **org-shared**, so every user of
   that connector arrives as the *same* agent. It is a bridge for a shared seat, not
   per-person identity.
-- **`budget_cap_cents` is settable only at creation.** `create_agent` and `create_squad`
-  accept it; `update_agent` cannot patch it and there is no `update_squad` tool at all. A
-  squad or agent created without a cap can never dispatch a budgeted flight — the only
-  remedy is to create a new one.
 - **No delivery receipt and no auto-escalation.** `send` returns when the row is written.
   Whether it was read is what the ACK convention in `/mupot:send` is for, and the pot does
   not enforce it.

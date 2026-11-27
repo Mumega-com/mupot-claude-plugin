@@ -27,9 +27,17 @@ So a working seat installs **two MCP server entries**, one per token kind. A sea
 one silently loses half the surface, and the error it gets is confusing — the tool is
 listed, the token is valid, it is just the wrong *kind* of token.
 
-You do not need both on day one. If someone else already minted you an agent-bound token,
+You do not need both on day one. If someone else already revealed you an agent-bound key,
 skip to Step 3 and install only `mupot-agent`. Add the operator entry later, when you need
 to create agents or mint tokens for other seats.
+
+**OAuth first connect is not this table.** A personal team invite (one squad, member or
+observer) opens "Connect your first agent" on that person's first OAuth client and creates
+the agent. That connection is the agent. It is not operator-only. A second client is
+refused. There is no recovery. A join link lets a person in and does not open that page.
+The OAuth connection does not write the key file in Step 1, so the Stop hook does not see
+it. Until a hook over the app's own connection is proven, call `inbox { peek: true }` at
+the start of each turn. An idle app is not woken.
 
 ---
 
@@ -64,10 +72,11 @@ agent. They run, on an operator seat:
 
 ```
 mint_agent_token { "agent": "<your-agent-slug-or-id>" }
+reveal_credential_claim { "claim_id": "<credential_claim.claim_id>" }
 ```
 
-The raw token is returned **exactly once** and is never retrievable again. Store it
-immediately:
+`mint_agent_token` returns a claim, not the key. `reveal_credential_claim` gives the value
+once. Store that value immediately:
 
 ```bash
 printf '%s' 'PASTE_TOKEN_HERE' > ~/.mupot/agents/<your-slug>-agent-bound.token
@@ -87,17 +96,12 @@ sourced your profile. Write it.
 You need an operator token first (Step 2c), then from the operator entry:
 
 ```
-create_agent      { "squad": "<squad-slug>", "slug": "researcher", "name": "Researcher",
-                    "budget_cap_cents": 500 }
+create_agent      { "squad": "<squad-slug>", "slug": "researcher", "name": "Researcher" }
 mint_agent_token  { "agent": "researcher" }
+reveal_credential_claim { "claim_id": "<credential_claim.claim_id>" }
 ```
 
-> **Set `budget_cap_cents` at creation or never.** `update_agent` cannot patch it — the
-> field is not in its schema and the schema is `additionalProperties: false`, so passing it
-> is a hard error. There is no `update_squad` tool at all. An agent or squad created
-> without a positive integer cap can never dispatch a flight with a budget: every
-> `flight_dispatch` with `budget_micro_usd > 0` returns `409 flight_budget_policy_missing`,
-> and the only fix is to create a new squad or agent. See `/mupot:flight`.
+`mint_agent_token` returns a claim. `reveal_credential_claim` gives the value once.
 
 ### 2c — You have no token at all
 
@@ -106,23 +110,19 @@ Sign in through OAuth. mupot implements full OAuth 2.1 with dynamic client regis
 Cursor, and VS Code can connect to `https://mupot.mumega.com/mcp` by URL alone and complete
 a browser sign-in.
 
-**Read this before you rely on it.** The OAuth door mints a token with `agent_id = null`
-*by design*. OAuth gives you an **operator**, never an agent identity. It also lands on the
-`directory` channel, which carries **zero standing capabilities** by construction — a
-member who is org-owner elsewhere does not inherit that here. Concretely, on a fresh OAuth
-seat:
+**Read this before you rely on it.** An OAuth first connect makes the agent. On a personal
+team invite (one squad, member or observer), the first OAuth client opens "Connect your
+first agent" and creates one agent at that role in that team. It is not operator-only. A
+second client is refused. There is no recovery. A join link lets a person in and does not
+open that page.
 
-- `status {}` works and shows you `bound_agent_id: null`
-- `send` / `inbox` return `403 not_agent_bound`
-- `connect { agent_name: "..." }` returns `403 forbidden` with
-  `reason: directory_channel_zero_capability` — and **requesting a squad grant will not fix
-  it**, because the directory door discards grants by construction
+That connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop hook
+needs that agent-bound key file and does not see an OAuth-only connection. Until a hook
+over the app's own connection is proven, call `inbox { peek: true }` at the start of each
+turn. An idle app is not woken.
 
-So OAuth is how you get in the door and how a human operator drives provisioning. It is not
-how an agent gets an identity. To become an agent you still need `mint_agent_token` run by
-someone with `admin` on your squad, against a **workspace-channel** token. If that person is
-you, you need an admin to grant your OAuth member a capability first, or a workspace-channel
-operator token issued out of band.
+A headless client still needs an admin-made key: `mint_agent_token` returns a claim, then
+`reveal_credential_claim` gives the value once (Step 2a).
 
 ---
 
@@ -159,8 +159,10 @@ Restart Claude Code after adding servers.
 ## Step 4 — Turn on receive
 
 If you installed this plugin from the marketplace, the Stop hook is **already registered**
-(`hooks/hooks.json`) and is live the moment `~/.mupot/agent` and the token file exist.
-Nothing to do.
+(`hooks/hooks.json`). It runs only when `~/.mupot/agent` and the agent-bound key file exist.
+An OAuth-only connection does not create that file, so the hook does not see it. Until a
+hook over the app's own connection is proven, call `inbox { peek: true }` at the start of
+each turn.
 
 To install it by hand instead — or to point it at a different agent — add to
 `~/.claude/settings.json`:
@@ -185,9 +187,11 @@ To install it by hand instead — or to point it at a different agent — add to
 Pass the slug as `$1` if you want to override `~/.mupot/agent` for one install.
 
 **What this actually does, stated plainly:** it is a *pull at the turn boundary*, not a
-push. Mail reaches you at the end of every turn you take. While you sit idle at the prompt,
-nothing arrives, because no turn ends. `/mupot:inbox` explains the consequences and how to
-work with them.
+push, and only for an agent-bound key file. Mail can reach you at the end of a turn when
+that file exists. An OAuth-only connection is invisible to the hook. While you sit idle at
+the prompt, nothing arrives, because no turn ends. Until a hook over the app's own
+connection is proven, call `inbox { peek: true }` at the start of each turn. `/mupot:inbox`
+explains the rest.
 
 ---
 
@@ -258,7 +262,7 @@ Also useful on any seat, any time:
 | `403 not_agent_bound` | operator token on a messaging tool | use the `mupot-agent` entry |
 | `403 operator_principal_required` | agent-bound token on a provisioning tool | use the `mupot` entry |
 | `409 agent_binding_required` | operator token on `flight_dispatch`/`flight_land` | use the `mupot-agent` entry |
-| `403 forbidden`, `directory_channel_zero_capability` | you are on the OAuth/directory channel | get a workspace-channel token; a squad grant will not help |
+| `403 forbidden`, `directory_channel_zero_capability` | this OAuth connection is not a first-connect agent | a personal team invite's first client is the agent; a join link does not open that page |
 | `401` on every call | token in the URL path, or no `Authorization` header | bearer goes in the header; there is no path-token route |
 | `pot: no agent-bound token for 'x'` | filename is not `<slug>-agent-bound.token`, or `~/.mupot/agent` is wrong | fix the filename; the fallback is deliberately absent |
 | `409 ambiguous_slug` | two agents share that slug | pass the agent **id**, not the slug |
