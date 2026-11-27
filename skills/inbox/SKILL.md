@@ -95,18 +95,9 @@ in `.delivered.json`. Nothing prunes this directory. On a busy seat, prune it yo
 
 Two causes, in order of likelihood.
 
-**1. The `signed_only` fence.** An agent can be set to `signed_only` inbox consumption
-(`set_agent_inbox_consumer`). When it is, a **bearer** read matches zero rows — the fence is
-a query predicate, not a refusal. You get `{ messages: [], remaining: 0 }` and **no error**.
-That silence is the whole symptom. Check it:
-
-```
-inbox_consumer_status {}
-```
-
-If the mode is `signed_only`, your bearer token cannot read this inbox at all and the hook
-will never deliver anything. That is the fence working as designed; you need the signed
-consumer, or an admin to move the fence back to `bearer_only`.
+**1. The `signed_only` fence.** A bearer read through MCP returns `409 consumer_fenced`.
+It does not return zero rows. Use the signed consumer that fence already authorizes.
+Changing the fence is not routine setup.
 
 **2. Someone else consumed it.** Delivery is once. If another process on your seat — a
 second Claude Code window, a cron, a stray `pot inbox` without `peek` — ran a consuming read,

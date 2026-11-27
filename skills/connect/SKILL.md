@@ -89,13 +89,14 @@ to. An admin or headless key uses an environment reference, not a pasted value:
   "mcpServers": {
     "mupot-agent": {
       "url": "https://mupot.mumega.com/mcp",
-      "headers": { "Authorization": "Bearer ${SEAT_TOKEN}" }
+      "headers": { "Authorization": "Bearer ${env:SEAT_TOKEN}" }
     }
   }
 }
 ```
 
-Never paste a key into chat.
+The launching process needs the protected environment value `SEAT_TOKEN`. Never paste a
+key into chat, and do not put it in this file or on the command line.
 
 ---
 
@@ -122,17 +123,15 @@ command, or a `--header` argument. Never paste a key into chat.
         "-y", "mcp-remote",
         "https://mupot.mumega.com/mcp",
         "--header", "Authorization:${MUPOT_AUTH}"
-      ],
-      "env": { "MUPOT_AUTH": "Bearer ${SEAT_TOKEN}" }
+      ]
     }
   }
 }
 ```
 
-The header is written `Authorization:${MUPOT_AUTH}` with no space after the colon, and the
-value carries the `Bearer ` prefix. Some Desktop builds split `args` entries on whitespace,
-which mangles `"Authorization: Bearer xyz"` into two arguments; keeping the space inside an
-env var sidesteps it. If your build handles it fine, the plain form works too.
+The launching process supplies `MUPOT_AUTH`. Do not override it inside this config. Header
+substitution is the bridge's own custom-header form:
+https://github.com/punkpeye/mcp-remote#custom-headers
 
 Restart Desktop fully after editing — quit, do not just close the window.
 

@@ -23,7 +23,8 @@ not open that page. A different Google account does not open it either.
 What the connection can call depends on the role. An observer is not granted send,
 task-board, or create rights. A token kind is not a capability grant.
 
-Do this, then stop. Do not install a second key or the file hook on this path.
+The prerequisite is an accepted personal team invite. Do this, then stop. Do not install a
+second key or the file hook on this path.
 
 1. Add the server. Do not pass a key.
 
@@ -31,10 +32,12 @@ Do this, then stop. Do not install a second key or the file hook on this path.
    claude mcp add --transport http mupot https://mupot.mumega.com/mcp
    ```
 
-2. Sign in when asked, with the Google account that matches the invite email.
+2. Start Claude Code, run `/mcp`, pick mupot, and choose to authenticate. Finish signing in
+   in the browser with the Google account the invite was sent to.
 3. Confirm once. The confirm page names the agent.
 4. Check the bound connection. `status` names that agent. There is no second entry to add.
-5. During a turn, call `inbox { peek: true }`. An idle app is not woken.
+5. Read inbox during a turn through this connection when its consumer fence and permissions
+   allow. This plugin doesn't implement idle wake.
 6. Stop.
 
 That OAuth connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop
@@ -99,14 +102,16 @@ separate branch.
 
 ## The short version
 
-OAuth first connect:
+The prerequisite is an accepted personal team invite. OAuth first connect:
 
 ```bash
 claude mcp add --transport http mupot https://mupot.mumega.com/mcp
 ```
 
-Sign in when asked, with the Google account that matches the invite email. Confirm once.
-During a turn, call `inbox { peek: true }`. Then stop.
+Start Claude Code, run `/mcp`, pick mupot, and choose to authenticate. Finish signing in in
+the browser with the Google account the invite was sent to. Confirm once. Read inbox during
+a turn through this connection when its consumer fence and permissions allow; this plugin
+doesn't implement idle wake. Then stop.
 
 An admin or headless key uses the environment reference above. Never paste a key into chat.
 
@@ -169,14 +174,12 @@ them. Config: `MUPOT_AGENT` (or `~/.mupot/agent`), `MUPOT_TOKEN_DIR`, `MUPOT_END
 
 Stated up front so you do not design around it.
 
-- **This plugin does not implement idle wake or push.** During a turn, call
-  `inbox { peek: true }`. The Stop hook, when an admin or headless key file exists, pulls at
-  the end of that turn. This plugin does not deliver into an idle session. An idle app is
-  not woken.
+- **This plugin doesn't implement idle wake.** Read inbox during a turn through this
+  connection when its consumer fence and permissions allow. The Stop hook, when an admin or
+  headless key file exists, pulls at the end of that turn.
 - **The Stop hook does not see an OAuth-only connection.** First connect makes the agent, and
-  it writes no key file. The hook needs `~/.mupot/agents/<slug>-agent-bound.token`. Until a
-  hook over the app's own connection is proven, check `inbox { peek: true }` at the start of
-  each turn.
+  it writes no key file. The hook needs `~/.mupot/agents/<slug>-agent-bound.token`. Read
+  inbox during a turn through this connection when its consumer fence and permissions allow.
 - **No delivery receipt and no auto-escalation.** `send` returns when the row is written.
   Whether it was read is what the ACK convention in `/mupot:send` is for, and the pot does
   not enforce it.

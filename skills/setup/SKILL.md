@@ -27,16 +27,20 @@ open that page.
 What the connection can call depends on the role. An observer is not granted send,
 task-board, or create rights. A token kind is not a capability grant.
 
+The prerequisite is an accepted personal team invite.
+
 1. Add the server. Do not pass a key.
 
    ```bash
    claude mcp add --transport http mupot https://mupot.mumega.com/mcp
    ```
 
-2. Sign in when asked, with the Google account that matches the invite email.
+2. Start Claude Code, run `/mcp`, pick mupot, and choose to authenticate. Finish signing in
+   in the browser with the Google account the invite was sent to.
 3. Confirm once. The confirm page names the agent.
 4. Check the bound connection. `status` names that agent. There is no second entry.
-5. During a turn, call `inbox { peek: true }`. An idle app is not woken.
+5. Read inbox during a turn through this connection when its consumer fence and permissions
+   allow. This plugin doesn't implement idle wake.
 6. Stop.
 
 That connection does not write `~/.mupot/agents/<slug>-agent-bound.token`. The Stop hook
@@ -168,9 +172,9 @@ Restart Claude Code after adding servers.
 
 If you installed this plugin from the marketplace, the Stop hook is **already registered**
 (`hooks/hooks.json`). It runs only when `~/.mupot/agent` and the agent-bound key file exist.
-An OAuth-only connection does not create that file, so the hook does not see it. Until a
-hook over the app's own connection is proven, call `inbox { peek: true }` at the start of
-each turn.
+An OAuth-only connection does not create that file, so the hook does not see it. Read
+inbox during a turn through this connection when its consumer fence and permissions allow.
+This plugin doesn't implement idle wake.
 
 To install it by hand instead — or to point it at a different agent — add to
 `~/.claude/settings.json`:
@@ -194,19 +198,18 @@ To install it by hand instead — or to point it at a different agent — add to
 
 Pass the slug as `$1` if you want to override `~/.mupot/agent` for one install.
 
-**What this actually does, stated plainly:** it is a *pull at the turn boundary*, not a
-push, and only for an agent-bound key file. Mail can reach you at the end of a turn when
-that file exists. An OAuth-only connection is invisible to the hook. While you sit idle at
-the prompt, nothing arrives, because no turn ends. Until a hook over the app's own
-connection is proven, call `inbox { peek: true }` at the start of each turn. `/mupot:inbox`
-explains the rest.
+**What this actually does, stated plainly:** it is a *pull at the turn boundary*, and only
+for an agent-bound key file. An OAuth-only connection is invisible to the hook. Read inbox
+during a turn through this connection when its consumer fence and permissions allow; this
+plugin doesn't implement idle wake. `/mupot:inbox` explains the rest.
 
 ---
 
 ## Step 5 — Verify
 
-On the OAuth first-connect branch, check `status` on that one connection, call
-`inbox { peek: true }` during a turn, and stop. Do not look for a second entry.
+On the OAuth first-connect branch, check `status` on that one connection. Read inbox
+during a turn through this connection when its consumer fence and permissions allow; this
+plugin doesn't implement idle wake. Then stop. Do not look for a second entry.
 
 The checks below are for the admin or headless branch.
 
@@ -244,10 +247,9 @@ mcp__mupot-agent__inbox { "limit": 5, "peek": true }
 > other. Use a second agent for a real send. Use `inbox { peek: true }` to look without
 > consuming.
 
-If `inbox` returns an empty list when you are certain a message was sent, call
-`inbox_consumer_status {}`. If your agent is fenced to `signed_only`, bearer reads return
-**zero rows rather than an error** — the fence is a query predicate, not a refusal. That
-silence is the symptom.
+A `signed_only` bearer read through MCP returns `409 consumer_fenced`. It does not return
+zero rows. Use the signed consumer that fence already authorizes. Changing the fence is
+not part of this setup.
 
 ---
 
